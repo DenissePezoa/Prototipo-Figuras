@@ -13,6 +13,7 @@ using Emgu.CV;
 using Emgu.CV.Structure;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Util;
+using Emgu.CV.OCR;
 using Emgu.CV.Cvb;
 using Emgu.CV.Cuda;
 //using Emgu.CV.UI;
@@ -164,274 +165,166 @@ namespace prot1
         private void DetectObject(Mat detectionFrame, Mat displayFrame, Rectangle box)
         {
             Image<Bgr, Byte> buffer_im = displayFrame.ToImage<Bgr, Byte>();
+            List<Triangle2DF> triangleList = new List<Triangle2DF>();
+            List<RotatedRect> boxList = new List<RotatedRect>(); //a box is a rotated rectangle
+            
+           
+          
+            //transforma imagen
+            //UMat uimage = new UMat();
+            // CvInvoke.CvtColor(displayFrame, uimage, ColorConversion.Bgr2Gray);
             using (VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint())
             {
-                VectorOfPoint biggestContour = null;
+                //VectorOfPoint biggestContour = null;
                 IOutputArray hirarchy = null;
+                CvInvoke.FindContours(detectionFrame, contours, hirarchy, RetrType.External, ChainApproxMethod.ChainApproxSimple);
+                //pictureBox5.Image = detectionFrame.Bitmap;
+                CvInvoke.Polylines(detectionFrame, contours, true, new MCvScalar(255, 0, 0), 2, LineType.FourConnected);
+                Image<Bgr, Byte> resultadoFinal = displayFrame.ToImage<Bgr, byte>();
 
-                CvInvoke.FindContours(detectionFrame, contours, hirarchy, RetrType.List, ChainApproxMethod.ChainApproxSimple);
-
+                //Circulos
+                //double cannyThreshold = 180.0;
+                //double circleAccumulatorThreshold = 120;
+                //CircleF[] circles = CvInvoke.HoughCircles(detectionFrame, HoughType.Gradient, 2.0, 20.0, cannyThreshold, circleAccumulatorThreshold, 5);
 
                 if (contours.Size > 0)
                 {
-                    double maxArea = 0;
+                    double maxArea = 1000;
                     int chosen = 0;
                     VectorOfPoint contour = null;
                     for (int i = 0; i < contours.Size; i++)
                     {
                         contour = contours[i];
-
+                       
                         double area = CvInvoke.ContourArea(contour);
                         if (area > maxArea)
                         {
-                            maxArea = area;
+                            //  maxArea = area;
                             chosen = i;
+                            //}
+                            //}
+                            
+                            //Boxes
+                            VectorOfPoint hullPoints = new VectorOfPoint();
+                            VectorOfInt hullInt = new VectorOfInt();
+
+                            CvInvoke.ConvexHull(contours[chosen], hullPoints, true);
+                            CvInvoke.ConvexHull(contours[chosen], hullInt, false);
+
+                            Mat defects = new Mat();
+
+
+                            if (hullInt.Size > 3)
+                                CvInvoke.ConvexityDefects(contours[chosen], hullInt, defects);
+
+                            box = CvInvoke.BoundingRectangle(hullPoints);
+                            CvInvoke.Rectangle(displayFrame, box, drawingColor);//Box rectangulo que encierra el area mas grande
+                                                                                // cropbox = crop_color_frame(displayFrame, box);
+
+                            buffer_im.ROI = box;
+
+                            Image<Bgr, Byte> cropped_im = buffer_im.Copy();
+                            //pictureBox8.Image = cropped_im.Bitmap;
+                            Point center = new Point(box.X + box.Width / 2, box.Y + box.Height / 2);//centro  rectangulo MOUSE
+                            Point esquina_superiorI = new Point(box.X, box.Y);
+                            Point esquina_superiorD = new Point(box.Right, box.Y);
+                            Point esquina_inferiorI = new Point(box.X, box.Y + box.Height);
+                            Point esquina_inferiorD = new Point(box.Right, box.Y + box.Height);
+                            CvInvoke.Circle(displayFrame, esquina_superiorI, 5, new MCvScalar(0, 0, 255), 2);
+                            CvInvoke.Circle(displayFrame, esquina_superiorD, 5, new MCvScalar(0, 0, 255), 2);
+                            CvInvoke.Circle(displayFrame, esquina_inferiorI, 5, new MCvScalar(0, 0, 255), 2);
+                            CvInvoke.Circle(displayFrame, esquina_inferiorD, 5, new MCvScalar(0, 0, 255), 2);
+                            CvInvoke.Circle(displayFrame, center, 5, new MCvScalar(0, 0, 255), 2);
+                            VectorOfPoint start_points = new VectorOfPoint();
+                            VectorOfPoint far_points = new VectorOfPoint();
+                            
+
+
+
+
                         }
                     }
 
-
-                    //MarkDetectedObject(displayFrame, contours[chosen], maxArea);//dibuja una envoltura roja
-
-                    VectorOfPoint hullPoints = new VectorOfPoint();
-                    VectorOfInt hullInt = new VectorOfInt();
-
-                    CvInvoke.ConvexHull(contours[chosen], hullPoints, true);
-                    CvInvoke.ConvexHull(contours[chosen], hullInt, false);
-
-                    Mat defects = new Mat();
-
-
-                    if (hullInt.Size > 3)
-                        CvInvoke.ConvexityDefects(contours[chosen], hullInt, defects);
-
-                    box = CvInvoke.BoundingRectangle(hullPoints);
-                    CvInvoke.Rectangle(displayFrame, box, drawingColor);//Box rectangulo que encierra el area mas grande
-                                                                        // cropbox = crop_color_frame(displayFrame, box);
-
-                    buffer_im.ROI = box;
-
-                    Image<Bgr, Byte> cropped_im = buffer_im.Copy();
-                    //pictureBox8.Image = cropped_im.Bitmap;
-                    Point center = new Point(box.X + box.Width / 2, box.Y + box.Height / 2);//centro  rectangulo MOUSE
-
-                    VectorOfPoint start_points = new VectorOfPoint();
-                    VectorOfPoint far_points = new VectorOfPoint();
-
-                    if (!defects.IsEmpty)
+                    //Dibuja borde amarillo 
+                    Image<Bgr, byte> temp = detectionFrame.ToImage<Bgr, byte>();
+                    var temp2 = temp.SmoothGaussian(5).Convert<Gray, byte>().ThresholdBinary(new Gray(230), new Gray(255));
+                    VectorOfVectorOfPoint contorno = new VectorOfVectorOfPoint();
+                    Mat mat = new Mat();
+                    CvInvoke.FindContours(temp2, contorno, mat, Emgu.CV.CvEnum.RetrType.External, Emgu.CV.CvEnum.ChainApproxMethod.ChainApproxSimple);
+                    for (int i = 0; i < contorno.Size; i++)
                     {
-
-                        Matrix<int> m = new Matrix<int>(defects.Rows, defects.Cols,
-                           defects.NumberOfChannels);
-                        defects.CopyTo(m);
-                        int xe = 2000, ye = 2000;
-                        int xs = 2000, ys = 2000;
-                        int xer = 2000, yer = 2000;
-                        int xsr = 2000, ysr = 2000;
-                        int xem = 0, yem = 0;
-                        int xsm = 0, ysm = 0;
-                        int xez = 0, yez = 0;
-                        int xsz = 0, ysz = 0;
-                        int y = 0, x = 0;
-                        int ym = 0, xm = 0;
-                        int yr = 0, xr = 0;
-                        int yz = 0, xz = 0;
-                        for (int i = 0; i < m.Rows; i++)
+                        
+                        VectorOfPoint approxContour = new VectorOfPoint();
+                        double perimetro = CvInvoke.ArcLength(contorno[i], true);
+                        VectorOfPoint approx = new VectorOfPoint();
+                        double area = CvInvoke.ContourArea(contorno[i]);
+                        if (area > 1000)
                         {
-                            int startIdx = m.Data[i, 0];
-                            int endIdx = m.Data[i, 1];
-                            int farIdx = m.Data[i, 2];
-                            Point startPoint = contours[chosen][startIdx];
-                            Point endPoint = contours[chosen][endIdx];
-                            Point farPoint = contours[chosen][farIdx];
-                            CvInvoke.Circle(displayFrame, endPoint, 3, new MCvScalar(0, 255, 255));
-                            CvInvoke.Circle(displayFrame, startPoint, 3, new MCvScalar(255, 255, 0));
-
-                            if (true)
-                            {
-                                if (endPoint.Y < ye)
-                                {
-                                    xe = endPoint.X;
-
-                                    ye = endPoint.Y;
-
-                                }
-
-                                if (startPoint.Y < ys)
-                                {
-                                    xs = startPoint.X;
-
-                                    ys = startPoint.Y;
-
-
-                                }
-
-                                if (ye < ys)
-                                {
-                                    y = ye;
-                                    x = xe;
-
-
-
-                                }
-                                else
-                                {
-                                    y = ys;
-                                    x = xs;
-                                }
-
-
-                                if (endPoint.Y > yem)
-                                {
-                                    xem = endPoint.X;
-
-                                    yem = endPoint.Y;
-
-                                }
-
-                                if (startPoint.Y > ysm)
-                                {
-                                    xsm = startPoint.X;
-
-                                    ysm = startPoint.Y;
-
-
-                                }
-
-                                if (yem > ysm)
-                                {
-                                    ym = yem;
-                                    xm = xem;
-
-
-
-                                }
-                                else
-                                {
-                                    y = ys;
-                                    x = xs;
-                                }
-
-                                if (endPoint.X < xer)
-                                {
-                                    xer = endPoint.X;
-
-                                    yer = endPoint.Y;
-
-                                }
-
-                                if (startPoint.X < xsr)
-                                {
-                                    xsr = startPoint.X;
-
-                                    ysr = startPoint.Y;
-
-
-                                }
-
-                                if (xer < xsr)
-                                {
-                                    yr = yer;
-                                    xr = xer;
-
-
-
-                                }
-                                else
-                                {
-                                    yr = ysr;
-                                    xr = xsr;
-                                }
-
-
-                                if (endPoint.X > xez)
-                                {
-                                    xez = endPoint.X;
-
-                                    yez = endPoint.Y;
-
-                                }
-
-                                if (startPoint.X > xsz)
-                                {
-                                    xsz = startPoint.X;
-
-                                    ysz = startPoint.Y;
-
-
-                                }
-
-                                if (xez > xsz)
-                                {
-                                    yz = yez;
-                                    xz = xez;
-
-
-
-                                }
-
-                                else
-                                {
-                                    yz = ysz;
-                                    xz = xsz;
-
-
-
-                                }
-
-
-                            }
-                            /*var info = new string[] {
-                
-                $"Posicion: {endPoint.X}, {endPoint.Y}"
-            };
-                            WriteMultilineText(displayFrame, info, new Point(endPoint.X + 5, endPoint.Y));*/
-
-                            double distance = Math.Round(Math.Sqrt(Math.Pow((center.X - farPoint.X), 2) + Math.Pow((center.Y - farPoint.Y), 2)), 1);
-                            if (distance < box.Height * 0.3)
-                            {
-                                CvInvoke.Circle(displayFrame, farPoint, 3, new MCvScalar(255, 0, 0));
-                            }
-
-                            CvInvoke.Line(displayFrame, startPoint, endPoint, new MCvScalar(0, 255, 0));
-                            // CvInvoke.Line(displayFrame, startPoint, farPoint, new MCvScalar(0, 255, 255));
-                        }
-                        var infoe = new string[] { $"Punto", $"Posicion: {x}, {y}" };
-                        var infos = new string[] { $"Punto", $"Posicion: {xm}, {ym}" };
-                        var infor = new string[] { $"Punto", $"Posicion: {x}, {y}" };
-                        var infoz = new string[] { $"Punto", $"Posicion: {xm}, {ym}" };
-                        var infoCentro = new string[] { $"Centro", $"Posicion: {xm}, {ym}" };
-
-                        var xCentro = (x + xm + xr + xz) / 4;
-                        var yCentro = (y + ym + yr + yz) / 4;
-
-                        WriteMultilineText(displayFrame, infoe, new Point(x + 30, y));
-                        CvInvoke.Circle(displayFrame, new Point(x, y), 5, new MCvScalar(255, 0, 255), 2);
-                        Image<Bgr, byte> temp = detectionFrame.ToImage<Bgr, byte>();
-                        var temp2 = temp.SmoothGaussian(5).Convert<Gray, byte>().ThresholdBinary(new Gray(230), new Gray(255));
-                        VectorOfVectorOfPoint contorno = new VectorOfVectorOfPoint();
-                        Mat mat = new Mat();
-                        CvInvoke.FindContours(temp2, contorno, mat, Emgu.CV.CvEnum.RetrType.External, Emgu.CV.CvEnum.ChainApproxMethod.ChainApproxSimple);
-                        for (int i = 0; i < contorno.Size; i++)
-                        {
-                            double perimetro = CvInvoke.ArcLength(contorno[i], true);
-                            VectorOfPoint approx = new VectorOfPoint();
                             CvInvoke.ApproxPolyDP(contorno[i], approx, 0.04 * perimetro, true);
                             CvInvoke.DrawContours(displayFrame, contorno, i, new MCvScalar(0, 255, 255), 2);
+                            //Triangulos y rectangulos
+                            //CvInvoke.ApproxPolyDP(contorno[i], approxContour, CvInvoke.ArcLength(contour, true) * 0.05, true);
+                            var moments = CvInvoke.Moments(contours[i]);
+                            int x = (int)(moments.M10 / moments.M00);
+                            int y = (int)(moments.M01 / moments.M00);
 
+                            if (approx.Size == 3) //The contour has 3 vertices, it is a triangle
+                            {
+                                Point[] pts = approx.ToArray();
+                                triangleList.Add(new Triangle2DF(pts[0], pts[1], pts[2]));
+                                Triangle2DF triangle = new Triangle2DF(pts[0], pts[1], pts[2]);
+                                //Point v0 = new Point(Convert.ToInt32(triangle.V0.X), Convert.ToInt32(triangle.V0.Y));
+                                //Point v1 = new Point(Convert.ToInt32(triangle.V1.X), Convert.ToInt32(triangle.V1.Y));
+                                //Point v2 = new Point(Convert.ToInt32(triangle.V2.X), Convert.ToInt32(triangle.V2.Y));
+                                resultadoFinal.Draw(triangle, new Bgr(Color.Cyan), 1);
+                                //CvInvoke.Circle(resultadoFinal, v0, 5, new MCvScalar(0, 255, 0), 2);
+                                //CvInvoke.Circle(resultadoFinal, v1, 5, new MCvScalar(0, 255, 0), 2);
+                                //CvInvoke.Circle(resultadoFinal, v2, 5, new MCvScalar(0, 255, 0), 2);
+                                CvInvoke.DrawContours(resultadoFinal, contorno, i, new MCvScalar(255, 255, 255), 1, LineType.AntiAlias);
+                                CvInvoke.PutText(resultadoFinal, "Triangle", new Point(x, y),
+                                Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new MCvScalar(0, 255, 255), 2);
+                            }
+                            if (approx.Size == 4) //The contour has 4 vertices.
+                            {
+                                boxList.Add(CvInvoke.MinAreaRect(approx));
+                                RotatedRect rectangle = CvInvoke.MinAreaRect(approx);
+                                CvInvoke.DrawContours(resultadoFinal, contorno, i, new MCvScalar(255, 255, 255), 2, LineType.AntiAlias);
+                                resultadoFinal.Draw(rectangle, new Bgr(Color.Cyan), 1);
+                                CvInvoke.PutText(resultadoFinal, "Rectangle", new Point(x, y),
+                                Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new MCvScalar(0, 255, 255), 2);
+                            }
+                            if (approx.Size == 5)
+                            {
+                                //IConvexPolygonF poligono = CvInvoke.MinAreaRect(approx);
+                                //resultadoFinal.Draw(poligono, new Bgr(Color.Cyan), 1);
+                                CvInvoke.DrawContours(resultadoFinal, contorno, i, new MCvScalar(255, 255, 0), 1, LineType.AntiAlias);
+                                CvInvoke.PutText(resultadoFinal, "Pentagon", new Point(x, y),
+                                    Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new MCvScalar(0, 255, 255), 2);
+                            }
+                            if (approx.Size == 6)
+                            {
+                                //IConvexPolygonF poligono = CvInvoke.MinAreaRect(approx);
+                                //resultadoFinal.Draw(poligono, new Bgr(Color.Cyan), 1);
+                                CvInvoke.DrawContours(resultadoFinal, contorno, i, new MCvScalar(255, 255, 0), 1, LineType.AntiAlias);
+                                CvInvoke.PutText(resultadoFinal, "Oval", new Point(x, y),
+                                    Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new MCvScalar(0, 255, 255), 2);
+                            }
+
+
+                            if (approx.Size > 6)
+                            {
+                                CvInvoke.PutText(resultadoFinal, "Circle", new Point(x, y),
+                                    Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new MCvScalar(0, 255, 255), 2);
+                                CircleF circle = CvInvoke.MinEnclosingCircle(approx);
+                                CvInvoke.DrawContours(resultadoFinal, contorno, i, new MCvScalar(255, 255, 255), 1, LineType.AntiAlias);
+                                resultadoFinal.Draw(circle, new Bgr(Color.Cyan), 1);
+
+                            }
                         }
 
-                        WriteMultilineText(displayFrame, infos, new Point(xm + 30, ym));
-                        CvInvoke.Circle(displayFrame, new Point(xm, ym), 5, new MCvScalar(255, 0, 255), 2);
-                        WriteMultilineText(displayFrame, infor, new Point(xr + 30, yr));
-                        CvInvoke.Circle(displayFrame, new Point(xr, yr), 5, new MCvScalar(255, 0, 255), 2);
-                        WriteMultilineText(displayFrame, infoz, new Point(xz + 30, yz));
-                        CvInvoke.Circle(displayFrame, new Point(xz, yz), 5, new MCvScalar(255, 0, 255), 2);
-
-                        WriteMultilineText(displayFrame, infoz, new Point(xCentro + 30, yCentro));
-                        CvInvoke.Circle(displayFrame, new Point(xCentro, yCentro), 2, new MCvScalar(0, 100, 0), 4);
-                        //CvInvoke.Circle(picture, new Point(x * 2, y * 4), 20, new MCvScalar(255, 0, 255), 2);*/
-
                     }
+                   
+                    pictureBox5.Image = resultadoFinal.Bitmap;
 
                 }
 
@@ -440,16 +333,6 @@ namespace prot1
         }
 
 
-
-        private static void WriteMultilineText(Mat frame, string[] lines, Point origin)
-        {
-            for (int i = 0; i < lines.Length; i++)
-            {
-                int y = i * 10 + origin.Y;
-                CvInvoke.PutText(frame, lines[i], new Point(origin.X, y), FontFace.HersheyPlain, 0.8, drawingColor);
-            }
-        }
-
         private void button2_Click(object sender, EventArgs e)
         {
             if (_frame.IsEmpty)
@@ -457,6 +340,9 @@ namespace prot1
                 return;
             }
 
+            Mat finalFrame = new Mat();
+            Mat aux = new Mat();
+            Rectangle cropbox = new Rectangle();
             Image<Bgr, byte> img = _frame.ToImage<Bgr, byte>();
             //Transformar a espacio de color HSV
             Image<Hsv, Byte> hsvimg = img.Convert<Hsv, Byte>();
@@ -467,8 +353,9 @@ namespace prot1
             Image<Gray, Byte> imgval = channels[2];            //hsv, channels[2] es value.
 
             //Filtro color
-            //140 en adelante
-            Image<Gray, byte> huefilter = imghue.InRange(new Gray(160), new Gray(255));
+            //140 en adelante 
+            //funciona  160
+            Image<Gray, byte> huefilter = imghue.InRange(new Gray(150), new Gray(255));
             //Filtro colores menos brillantes
             Image<Gray, byte> valfilter = imgval.InRange(new Gray(100), new Gray(255));
             //Filtro de saturación - quitar blancos 
@@ -476,8 +363,17 @@ namespace prot1
 
             //Unir los filtros para obtener la imagen
             Image<Gray, byte> colordetimg = huefilter.And(valfilter).And(channels[1]);//aqui habia un Not()
-            colordetimg._Erode(1);
-            colordetimg._Dilate(1);
+            pictureBox2.Image = colordetimg.Bitmap;
+            //colordetimg._Erode(1);
+            Mat SE2 = CvInvoke.GetStructuringElement(Emgu.CV.CvEnum.ElementShape.Rectangle, new Size(3, 2), new Point(-1, -1));
+            CvInvoke.MorphologyEx(colordetimg, colordetimg, MorphOp.Erode, SE2, new Point(-1, -1), 2, BorderType.Default, new MCvScalar(255));
+            Mat SE3 = CvInvoke.GetStructuringElement(Emgu.CV.CvEnum.ElementShape.Rectangle, new Size(3, 3), new Point(-1, -1));
+            CvInvoke.MorphologyEx(colordetimg, colordetimg, MorphOp.Dilate, SE3, new Point(-1, -1), 4, BorderType.Default, new MCvScalar(255));
+           
+            ////colordetimg._Erode(1);
+            //colordetimg._Dilate(3);
+            //colordetimg._Erode(1);
+
             //Colorear imagen
             //Image<Bgr, byte> ret = img;
             //var mat = img.Mat;
@@ -487,7 +383,7 @@ namespace prot1
 
             //ret._Or(imge);
             //Muestra imagen con los rojos destacados
-            pictureBox2.Image = colordetimg.Bitmap;
+            
             /*
              1. Edge detection (sobel)
              2. Dilation (10,1)
@@ -496,45 +392,30 @@ namespace prot1
              */
             //sobel
             Image<Gray, byte> sobel = colordetimg;
-            //Image<Gray, byte> sobel = colordetimg.Convert<Gray, byte>().Sobel(0, 1, 5).AbsDiff(new Gray(0.0)).Convert<Gray, byte>().ThresholdBinary(new Gray(70), new Gray(255));
-            //Image<Gray, byte> sobel2 = colordetimg.Convert<Gray, byte>().Sobel(1, 0, 5).AbsDiff(new Gray(0.0)).Convert<Gray, byte>().ThresholdBinary(new Gray(70), new Gray(255));
+            //Image<Gray, byte> sobel = colordetimg.Sobel(0, 1, 1).AbsDiff(new Gray(0.0)).Convert<Gray, byte>();//.ThresholdBinary(new Gray(80), new Gray(255));
+            //Image<Gray, byte> sobel2 = colordetimg.Sobel(1, 0, 1).AbsDiff(new Gray(0.0)).Convert<Gray, byte>();//.ThresholdBinary(new Gray(80), new Gray(255));
+          
             //sobel.And(sobel2);
             //pictureBox3.Image = sobel.Bitmap;
-            Mat SE = CvInvoke.GetStructuringElement(Emgu.CV.CvEnum.ElementShape.Rectangle, new Size(10, 2), new Point(-1, -1));
-            sobel = sobel.MorphologyEx(Emgu.CV.CvEnum.MorphOp.Close, SE, new Point(-1, -1), 15, Emgu.CV.CvEnum.BorderType.Reflect, new MCvScalar(255));
-            Emgu.CV.Util.VectorOfVectorOfPoint contours = new Emgu.CV.Util.VectorOfVectorOfPoint();
-            Mat m = new Mat();
+            Mat SE = CvInvoke.GetStructuringElement(Emgu.CV.CvEnum.ElementShape.Rectangle, new Size(3, 3), new Point(-1, -1));
+            CvInvoke.MorphologyEx(colordetimg,aux,  Emgu.CV.CvEnum.MorphOp.Close, SE, new Point(-1, -1),3, Emgu.CV.CvEnum.BorderType.Reflect, new MCvScalar(255));
             
-            CvInvoke.FindContours(sobel, contours, m, Emgu.CV.CvEnum.RetrType.External, Emgu.CV.CvEnum.ChainApproxMethod.ChainApproxSimple);
-           // pictureBox3.Image = sobel.Bitmap;
-            
-            List<Rectangle> list = new List<Rectangle>();
+            //CvInvoke.MorphologyEx(sobel,aux, MorphOp.Close, SE,new Point (-1,-1), 1, BorderType.Reflect, new MCvScalar(255));
+            pictureBox3.Image = aux.Bitmap;
+           
+           
 
-            for (int i = 0; i < contours.Size; i++)
-            {
-                Rectangle brect = CvInvoke.BoundingRectangle(contours[i]);
+            _frame.CopyTo(finalFrame);
+           
+            DetectObject(aux, finalFrame, cropbox);
 
-                double ar = brect.Width / brect.Height;
-                if (ar > 2 && brect.Width > 25 && brect.Height > 8 && brect.Height < 100)
-                {
-                    list.Add(brect);
-                }
-            }
-            //MessageBox.Show(list.ElementAt(0).ToString());
 
-            Image<Bgr, byte> imgout = img.CopyBlank();
-            foreach (var r in list)
-            {
-                CvInvoke.Rectangle(colordetimg, r, new MCvScalar(0, 0, 255), 2);
-                CvInvoke.Rectangle(imgout, r, new MCvScalar(0, 255, 255), -1);
-            }
-            imgout._And(img);
-            //pictureBox1.Image = img.Bitmap;
-           pictureBox3.Image = imgout.Bitmap;
-
+            pictureBox4.Image = finalFrame.Bitmap;
             //double fps = 15;
             //await Task.Delay(1000 / Convert.ToInt32(fps));
 
         }
+
+       
     }
 }
